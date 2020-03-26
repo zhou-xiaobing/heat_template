@@ -1,0 +1,75 @@
+heat_template_version: 2013-05-23
+description: AutoScaling Wordpress
+parameters:
+  image:
+    type: string
+    label: IMAGE NAME
+    description: Image used for the instance
+    default: Centos7-x86_64
+  key:
+    type: string
+    label: KEY NAME
+    description: SSH key to connect to the instance
+    default: Mikata
+  flavor:
+    type: string
+    label: FLAVOR NAME
+    description: flavor used by the instance
+    default: storage.017
+  internal_net:
+    type: string
+    label: INTERNAL NET NAME
+    description: internal network ID for the instance
+    default: admin_internal_net
+resources:
+  web_server_scaleup_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: web_server_group}
+      cooldown: 180
+      scaling_adjustment: 1
+  cpu_alarm_high:
+    type: OS::Ceilometer::Alarm
+    properties:
+      description: Scale-up if the average CPU > 70% for 3 minute
+      meter_name: cpu_util
+      statistic: avg
+      period: 60
+      evaluation_periods: 3
+      threshold: 70
+      alarm_actions:
+        - {get_attr: [web_server_scaleup_policy, alarm_url]}
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: gt
+  web_server_group:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      desired_capacity: 1
+      min_size: 1
+      max_size: 3
+      resource:
+        type: OS::Nova::Server
+        properties:
+          flavor: {get_param: flavor}
+          image: {get_param: image}
+          key_name: {get_param: key}
+          metadata: {"metering.stack": {get_param: "OS::stack_id"}}
+          networks:
+          - network: { get_param: internal_net }
+
+outputs:
+  scale_up_url:
+    description: >
+      This URL is the webhook to scale up the autoscaling group.  You
+      can invoke the scale-up operation by doing an HTTP POST to this
+      URL; no body nor extra headers are needed.
+    value: {get_attr: [web_server_scaleup_policy, alarm_url]}
+  ceilometer_query:
+    value:
+      str_replace:
+        template: >
+          ceilometer statistics -m cpu_util
+          -q metadata.user_metadata.stack=stackval -p 60 -a avg
+        params:
+          stackval: { get_param: "OS::stack_id" }
