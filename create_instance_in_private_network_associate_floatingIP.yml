@@ -1,0 +1,73 @@
+heat_template_version: 2016-04-08
+description: create a instance in specified network and associated a floating ip by Xiaobing Zhou
+
+parameters:
+  image:
+    type: string
+    label: IMAGE NAME
+    description: Image used for the instance
+    default: ubuntu18.04-LVM-with-docker
+  key:
+    type: string
+    label: KEY NAME
+    description: SSH key to connect to the instance
+    default: Mikata
+  flavor:
+    type: string
+    label: FLAVOR NAME
+    description: flavor used by the instance
+    default: m1.medium
+  internal_net:
+    type: string
+    label: INTERNAL NET NAME
+    description: internal network ID for the instance
+    default: admin_internal_net
+  public_net:
+    type: string
+    label: PUBLIC NET NAME
+    description: public network ID for the instance
+    default: admin_floating_net
+  floating_ip_address:
+    type: string
+    label: FLOATING IP ADDRESS
+    description: public network port for the instance
+    default: 10.80.0.180
+
+
+resources:
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {get_param: public_net}
+      floating_ip_address: {get_param: floating_ip_address}
+
+  instance:
+    type: OS::Nova::Server
+    properties:
+      flavor: {get_param: flavor}
+      image: {get_param: image}
+      key_name: {get_param: key}
+      networks:
+        - network: {get_param: internal_net}
+
+  association:
+    type: OS::Nova::FloatingIPAssociation
+    properties:
+      floating_ip: { get_resource: floating_ip }
+      server_id: { get_resource: instance }
+
+outputs:
+  instance_image:
+    value: {get_param: image}
+  instance_flavor:
+    value: {get_param: flavor}
+  instance_key:
+    value: {get_param: key}
+  instance_floating_ip:
+    value: {get_param: floating_ip_address}
+  self_stack_id:
+    value: {get_param: "OS::stack_id"}
+
+
+
+
